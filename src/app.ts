@@ -7,7 +7,7 @@ const app = express();
 
 app.use(express.json());
 
-// 🔑 CONEXÃO COM O MONGO (OBRIGATÓRIA)
+//  CONEXÃO COM O MONGO 
 connectMongo()
   .then(() => console.log('MongoDB connected'))
   .catch(err => console.error('Mongo connection error:', err));
