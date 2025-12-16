@@ -1,13 +1,17 @@
-﻿import express, { Express, Request, Response } from 'express';
+﻿import 'dotenv/config';
+import express from 'express';
+import { connectMongo } from './database/mongo';
 import webhookRoutes from './routes/webhook.routes';
 
-const app: Express = express();
+const app = express();
 
 app.use(express.json());
-app.use('/webhook', webhookRoutes);
 
-app.get('/health', (_req: Request, res: Response) => {
-  res.json({ status: 'ok' });
-});
+// 🔑 CONEXÃO COM O MONGO (OBRIGATÓRIA)
+connectMongo()
+  .then(() => console.log('MongoDB connected'))
+  .catch(err => console.error('Mongo connection error:', err));
+
+app.use('/webhook', webhookRoutes);
 
 export default app;

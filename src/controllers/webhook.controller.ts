@@ -1,5 +1,7 @@
 import { type Request, type Response } from 'express';
 import { sendTextMessage } from '../services/whatsapp.service';
+import { Company } from '../models/company';
+import { Product } from '../models/product';
 
 const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 
@@ -54,31 +56,129 @@ const shouldSendGreeting = (text: string): boolean => {
   return normalized === 'oi' || normalized === 'ola';
 };
 
-export const verifyWebhook = (req: Request, res: Response): void => {
-  const mode = getQueryValue(req, 'hub.mode');
-  const verifyToken = getQueryValue(req, 'hub.verify_token');
-  const challenge = getQueryValue(req, 'hub.challenge');
+// export const verifyWebhook = (req: Request, res: Response): void => {
+//   const mode = getQueryValue(req, 'hub.mode');
+//   const verifyToken = getQueryValue(req, 'hub.verify_token');
+//   const challenge = getQueryValue(req, 'hub.challenge');
 
-  if (mode === 'subscribe' && verifyToken === WHATSAPP_VERIFY_TOKEN) {
-    res.status(200).send(challenge);
-    return;
+//   if (mode === 'subscribe' && verifyToken === WHATSAPP_VERIFY_TOKEN) {
+//     res.status(200).send(challenge);
+//     return;
+//   }
+
+//   res.sendStatus(403);
+// };
+
+// export const verifyWebhook = (req: Request, res: Response) => {
+//   const mode = req.query['hub.mode'];
+//   const token = req.query['hub.verify_token'];
+//   const challenge = req.query['hub.challenge'];
+
+//   console.log('--- VERIFY WEBHOOK DEBUG ---');
+//   console.log('hub.mode:', mode);
+//   console.log('hub.verify_token:', token);
+//   console.log('hub.challenge:', challenge);
+//   console.log('ENV TOKEN:', process.env.WHATSAPP_VERIFY_TOKEN);
+//   console.log('-----------------------------');
+
+//   if (mode === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
+//     return res.status(200).send(challenge);
+//   }
+
+//   return res.sendStatus(403);
+// };
+
+export const verifyWebhook = (req: Request, res: Response) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  if (
+    mode === 'subscribe' &&
+    token === process.env.WHATSAPP_VERIFY_TOKEN
+  ) {
+    return res.status(200).send(challenge);
   }
 
-  res.sendStatus(403);
+  return res.sendStatus(403);
 };
 
-export const handleWebhookEvent = async (req: Request, res: Response): Promise<void> => {
-  console.log('WhatsApp webhook received:', req.body);
 
-  const incomingMessage = extractTextMessage(req.body);
+export const handleWebhookEvent = async (req: Request, res: Response) => {
+  const value = req.body?.entry?.[0]?.changes?.[0]?.value;
 
-  if (incomingMessage && shouldSendGreeting(incomingMessage.text)) {
-    try {
-      await sendTextMessage(incomingMessage.from, 'Olá! 👋 Como posso ajudar?');
-    } catch (error) {
-      console.error('Failed to send greeting message', error);
+  // Segurança: payload inválido
+  if (!value) {
+    return res.status(200).json({ received: true });
+  }
+
+  // 🔑 IDENTIFICA A EMPRESA (MULTI-TENANT)
+  const phoneNumberId = value?.metadata?.phone_number_id;
+
+  if (!phoneNumberId) {
+    return res.status(200).json({ received: true });
+  }
+
+  const company = await Company.findOne({
+    whatsappPhoneNumberId: phoneNumberId,
+  });
+
+  // Empresa não cadastrada → ignora
+  if (!company) {
+    return res.status(200).json({ received: true });
+  }
+
+  // 🗣️ MENSAGEM DO USUÁRIO
+  const message = value?.messages?.[0];
+
+  if (!message || !message.text) {
+    return res.status(200).json({ received: true });
+  }
+
+  const from = message.from;
+  const text = message.text.body.toLowerCase();
+
+  // 🔒 Anti-loop (ignora mensagens do próprio bot)
+  if (from === phoneNumberId) {
+    return res.status(200).json({ received: true });
+  }
+
+  // 👋 SAUDAÇÃO
+  if (text === 'oi' || text === 'olá' || text === 'ola') {
+    await sendTextMessage(
+      from,
+      `Olá! 👋 Aqui é o atendimento da *${company.name}*.
+Digite:
+1️⃣ Ver produtos
+2️⃣ Endereço
+3️⃣ Falar com atendente`
+    );
+  }
+
+  // 📦 LISTAR PRODUTOS
+  if (text === '1') {
+    const products = await Product.find({
+      companyId: company._id,
+    }).limit(5);
+
+    if (!products.length) {
+      await sendTextMessage(
+        from,
+        'No momento não temos produtos cadastrados.'
+      );
+      return res.status(200).json({ received: true });
     }
+
+    const list = products
+      .map(p => `• ${p.name} — R$${p.price}`)
+      .join('\n');
+
+    await sendTextMessage(
+      from,
+      `📦 Produtos da *${company.name}*:\n${list}\n\nDigite o nome para saber mais.`
+    );
   }
 
-  res.status(200).json({ received: true });
+  return res.status(200).json({ received: true });
 };
+
