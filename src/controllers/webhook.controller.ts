@@ -1,8 +1,10 @@
 import { Request, Response } from 'express';
 import { sendTextMessage } from '../services/whatsapp.service';
 import { detectIntent } from '../services/intent.services';
+import { generateReply } from '../services/ai.service';
 import { Company } from '../models/company';
 import { Product } from '../models/product';
+import { setLastProduct, getLastProduct } from '../services/session.service';
 
 export const verifyWebhook = (req: Request, res: Response) => {
   const mode = req.query['hub.mode'];
@@ -32,6 +34,7 @@ export const handleWebhookEvent = async (req: Request, res: Response) => {
   const from = message.from;
   const text = message.text.body;
 
+  // anti-loop
   if (from === phoneNumberId) return res.status(200).json({ received: true });
 
   const intentResult = detectIntent(text);
@@ -56,9 +59,14 @@ Digite:
       }).limit(5);
 
       if (!products.length) {
-        await sendTextMessage(from, 'No momento não temos produtos cadastrados.');
+        await sendTextMessage(
+          from,
+          'No momento não temos produtos cadastrados.'
+        );
         break;
       }
+
+      setLastProduct(from, products[0]._id.toString());
 
       const list = products
         .map(p => `• ${p.name} — R$${p.price}`)
@@ -66,29 +74,81 @@ Digite:
 
       await sendTextMessage(
         from,
-        `📦 Produtos da *${company.name}*:\n${list}\n\nDigite o nome do produto para saber mais.`
+        `📦 Produtos da *${company.name}*:\n${list}\n\nPode perguntar sobre qualquer um deles 😊`
       );
       break;
     }
 
     case 'PRODUCT_QUERY': {
-      const product = await Product.findOne({
+      let product = await Product.findOne({
         companyId: company._id,
-        name: { $regex: intentResult.query, $options: 'i' },
+        name: { $regex: intentResult.query ?? '', $options: 'i' },
       });
 
       if (!product) {
-        await sendTextMessage(from, 'Não encontrei esse produto 😕');
+        const lastProductId = getLastProduct(from);
+        if (lastProductId) {
+          product = await Product.findById(lastProductId);
+        }
+      }
+
+      if (!product) {
+        await sendTextMessage(
+          from,
+          'Não consegui identificar qual produto você quer saber mais 😕'
+        );
         break;
       }
 
-      await sendTextMessage(
-        from,
-        `🛍️ *${product.name}*
-${product.description}
-💰 R$${product.price}`
-      );
-      break;
+      // 🔎 Se faltar informação mínima, NÃO chama IA
+      if (!product.description || !product.price) {
+        await sendTextMessage(
+          from,
+          'Não tenho todos os detalhes desse produto agora 😕\nQuer que eu chame um atendente humano pra te ajudar melhor?'
+        );
+        break;
+      }
+
+      // 🧠 IA = SOMENTE HUMANIZAÇÃO
+      try {
+        const systemPrompt = `
+Você é um atendente humano de loja conversando no WhatsApp.
+Seja educado, natural e objetivo.
+Responda apenas com base nas informações fornecidas.
+Se não houver informação suficiente, diga isso claramente.
+Não invente nada.
+`;
+
+        const context = `
+Produto: ${product.name}
+Descrição: ${product.description}
+Preço: R$${product.price}
+`;
+
+        const aiResponse = await generateReply({
+          system: systemPrompt,
+          user: text,
+          context,
+        });
+
+        if (!aiResponse.text || aiResponse.text.trim().length < 5) {
+          await sendTextMessage(
+            from,
+            'Não tenho essa informação com precisão agora 😕\nPosso chamar um atendente humano se quiser.'
+          );
+          break;
+        }
+
+        await sendTextMessage(from, aiResponse.text);
+        break;
+      } catch (err) {
+        console.error('Erro IA:', err);
+        await sendTextMessage(
+          from,
+          'Tive dificuldade em responder isso agora 😕\nQuer que eu chame um atendente humano?'
+        );
+        break;
+      }
     }
 
     case 'ADDRESS':
