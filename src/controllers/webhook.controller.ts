@@ -100,16 +100,9 @@ Digite:
         break;
       }
 
-      // 🔎 Se faltar informação mínima, NÃO chama IA
-      if (!product.description || !product.price) {
-        await sendTextMessage(
-          from,
-          'Não tenho todos os detalhes desse produto agora 😕\nQuer que eu chame um atendente humano pra te ajudar melhor?'
-        );
-        break;
-      }
-
       // 🧠 IA = SOMENTE HUMANIZAÇÃO
+      // Permitir chamada à IA mesmo se descrição/preço estiverem ausentes.
+      // Passamos valores padrão no contexto e a IA deve indicar se não há informação suficiente.
       try {
         const systemPrompt = `
 Você é um atendente humano de loja conversando no WhatsApp.
@@ -119,16 +112,31 @@ Se não houver informação suficiente, diga isso claramente.
 Não invente nada.
 `;
 
+        const description = product.description || 'Descrição não informada';
+        const price = (product.price !== undefined && product.price !== null) ? `R$${product.price}` : 'Preço não informado';
+
         const context = `
-Produto: ${product.name}
-Descrição: ${product.description}
-Preço: R$${product.price}
-`;
+      Produto: ${product.name}
+      Descrição: ${description}
+      Preço: ${price}
+      `;
+
+        console.log('webhook -> calling generateReply', {
+          from,
+          productId: product._id?.toString ? product._id.toString() : product._id,
+          productName: product.name,
+          userText: text,
+          contextPreview: context.slice(0, 400),
+        });
 
         const aiResponse = await generateReply({
           system: systemPrompt,
           user: text,
           context,
+        });
+
+        console.log('webhook -> generateReply returned', {
+          textLength: aiResponse?.text?.length ?? 0,
         });
 
         if (!aiResponse.text || aiResponse.text.trim().length < 5) {

@@ -66,32 +66,58 @@ export const generateReply = async (
     `\nASSISTENTE:\n`,
   ].join('');
 
-  const response = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: OLLAMA_MODEL,
-      prompt,
-      stream: false,
-      options: {
-        temperature: 0.4,
-        num_predict: 180,
-      },
-    }),
+  // Log request metadata for debugging
+  console.log('AI.generateReply -> calling Ollama', {
+    OLLAMA_BASE_URL,
+    OLLAMA_MODEL,
+    promptPreview: prompt.slice(0, 400),
   });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `Erro ao gerar resposta da IA: ${response.status} - ${errorText}`
-    );
+  try {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        prompt,
+        stream: false,
+        options: {
+          temperature: 0.4,
+          num_predict: 180,
+        },
+      }),
+    });
+
+    const raw = await response.text();
+
+    if (!response.ok) {
+      console.error('AI.generateReply -> Ollama error response', {
+        status: response.status,
+        body: raw,
+      });
+      throw new Error(
+        `Erro ao gerar resposta da IA: ${response.status} - ${raw}`
+      );
+    }
+
+    // Try parse JSON, but log raw body if parsing fails
+    let data: { response?: string } = {};
+    try {
+      data = JSON.parse(raw) as { response?: string };
+    } catch (e) {
+      console.warn('AI.generateReply -> failed to parse JSON from Ollama', e);
+    }
+
+    const text = (data.response ?? raw ?? '').trim();
+    console.log('AI.generateReply -> received text length', text.length);
+
+    return {
+      text,
+    };
+  } catch (err) {
+    console.error('AI.generateReply -> fetch error', err);
+    throw err;
   }
-
-  const data = (await response.json()) as { response?: string };
-
-  return {
-    text: (data.response ?? '').trim(),
-  };
 };
