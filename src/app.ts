@@ -2,6 +2,7 @@
 import express from 'express';
 import { connectMongo } from './database/mongo';
 import webhookRoutes from './routes/webhook.routes';
+import testRoutes from './routes/test.routes';
 
 const app = express();
 
@@ -13,6 +14,7 @@ connectMongo()
   .catch(err => console.error('Mongo connection error:', err));
 
 app.use('/webhook', webhookRoutes);
+app.use('/test', testRoutes);
 
 export default app;
 

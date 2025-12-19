@@ -1,8 +1,8 @@
 type SessionData = {
   lastCategory?: string;
   lastSubcategory?: string;
-  lastProductId?: string;
-  greeted?: boolean;
+  lastProduct?: string;
+  handedOff?: boolean;
 };
 
 const sessions = new Map<string, SessionData>();
@@ -16,7 +16,7 @@ export const setLastCategory = (user: string, category: string) => {
     ...current,
     lastCategory: category,
     lastSubcategory: undefined,
-    lastProductId: undefined,
+    lastProduct: undefined,
   });
 };
 
@@ -32,7 +32,7 @@ export const setLastSubcategory = (user: string, subcategory: string) => {
   sessions.set(user, {
     ...current,
     lastSubcategory: subcategory,
-    lastProductId: undefined,
+    lastProduct: undefined,
   });
 };
 
@@ -47,32 +47,37 @@ export const setLastProduct = (user: string, productId: string) => {
   const current = sessions.get(user) ?? {};
   sessions.set(user, {
     ...current,
-    lastProductId: productId,
+    lastProduct: productId,
   });
 };
 
 export const getLastProduct = (user: string) => {
-  return sessions.get(user)?.lastProductId;
+  return sessions.get(user)?.lastProduct;
 };
 
 /* =====================================================
    GREETING STATUS (rastreia se usuário já foi saudado)
 ===================================================== */
-export const isUserGreeted = (user: string) => {
-  return sessions.get(user)?.greeted ?? false;
-};
-
-export const markUserAsGreeted = (user: string) => {
-  const current = sessions.get(user) ?? {};
-  sessions.set(user, {
-    ...current,
-    greeted: true,
-  });
-};
+// Greeting/menu-first model removed in Chatbot 2.0 — no greeted state
 
 /* =====================================================
    RESET (opcional, mas útil)
 ===================================================== */
 export const resetSession = (user: string) => {
   sessions.delete(user);
+};
+
+/* =====================================================
+   HANDOFF (encaminhamento para atendente humano)
+===================================================== */
+export const setHandOff = (user: string) => {
+  const current = sessions.get(user) ?? {};
+  sessions.set(user, {
+    ...current,
+    handedOff: true,
+  });
+};
+
+export const isHandedOff = (user: string) => {
+  return sessions.get(user)?.handedOff ?? false;
 };
