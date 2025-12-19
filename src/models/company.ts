@@ -18,3 +18,5 @@ const CompanySchema = new Schema({
 });
 
 export const Company = model('Company', CompanySchema);
+
+// teste
