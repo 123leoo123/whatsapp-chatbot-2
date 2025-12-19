@@ -2,6 +2,7 @@ type SessionData = {
   lastCategory?: string;
   lastSubcategory?: string;
   lastProductId?: string;
+  greeted?: boolean;
 };
 
 const sessions = new Map<string, SessionData>();
@@ -52,6 +53,21 @@ export const setLastProduct = (user: string, productId: string) => {
 
 export const getLastProduct = (user: string) => {
   return sessions.get(user)?.lastProductId;
+};
+
+/* =====================================================
+   GREETING STATUS (rastreia se usuário já foi saudado)
+===================================================== */
+export const isUserGreeted = (user: string) => {
+  return sessions.get(user)?.greeted ?? false;
+};
+
+export const markUserAsGreeted = (user: string) => {
+  const current = sessions.get(user) ?? {};
+  sessions.set(user, {
+    ...current,
+    greeted: true,
+  });
 };
 
 /* =====================================================

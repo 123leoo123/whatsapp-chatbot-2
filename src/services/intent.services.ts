@@ -8,13 +8,15 @@ type IntentResult =
   | { intent: 'PRODUCT_QUERY'; query: string };
 
 /* =====================================================
-   NORMALIZA TEXTO
+   NORMALIZA TEXTO (remove pontuação, acentos, espaços)
 ===================================================== */
 const normalize = (text: string) =>
   text
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[\u0300-\u036f]/g, '') // remove acentos
+    .replace(/[^\w\s]/g, '') // remove pontuação
+    .replace(/\s+/g, ' ') // normaliza espaços múltiplos
     .trim();
 
 /* =====================================================
